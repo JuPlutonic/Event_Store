@@ -3,7 +3,7 @@ require 'pp'
 # * event - event what already happend
 # * event store - event storage place
 # * projection - think that collect the state
-# * poroducer - abstraction what creates events
+# * producer - abstraction what creates events
 #
 
 # Event
