@@ -1,5 +1,5 @@
 # Event_Store
-Event Store: Stickers store. All code placed in liи
+Event Store: Stickers store. All code placed in /lib/events_store_and_projections.rb
 
 TODO:
 Watch some videos.
