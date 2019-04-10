@@ -44,10 +44,17 @@ class EventStore
     @store
   end
 
+# ENVOLVE IS BETTER (than append) BECAUSE IT USING PRODUCER
   def append(*events)
     puts '<' * 80
     events.each { |event| @store << event }
   end
+  def envolve(producer, payload)
+    @store
+    new_events = producer.call(@store, payload)
+    @store = @store + new_events
+  end
+
 end
 
 # projection
@@ -157,34 +164,92 @@ end
 ###############################################
 # CostForOrders                               #
 #
-p '*' * 40
-event_store = EventStore.new
-project = Projections::Project.new
-event = Events::OrderCreated.new(payload: { order_id: 1, account_id: 1 })
-event_store.append(event)
-event = Events::OrderCreated.new(payload: { order_id: 2, account_id: 2 })
-event_store.append(event)
 
-puts 'Added 2 orders:'
-events = event_store.get
-pp project.call(Projections::AllOrders.new, {}, events)
 
-p '*' * 40
-event = Events::ItemAddedToOrder.new(payload: { order_id: 1, item_id: 1, name: 'ruby sticker', cost: 10 })
-event_store.append(event)
-event = Events::ItemAddedToOrder.new(payload: { order_id: 1, item_id: 2, name: 'git sticker', cost: 17 })
-event_store.append(event)
-event = Events::ItemAddedToOrder.new(payload: { order_id: 2, item_id: 3, name: 'ruby sticker', cost: 11 })
-event_store.append(event)
 
-puts "\nAdded stickers. Added cost:"
-events = event_store.get
-pp project.call(Projections::AllOrders.new, {}, events)
+#LAST COMMENTED
 
-puts "\nTally cost of orders:"
-pp project.call(Projections::CostForOrders.new, {}, events)
+
+
+# p '*' * 40
+# event_store = EventStore.new
+# project = Projections::Project.new
+# event = Events::OrderCreated.new(payload: { order_id: 1, account_id: 1 })
+# event_store.append(event)
+# event = Events::OrderCreated.new(payload: { order_id: 2, account_id: 2 })
+# event_store.append(event)
+
+# puts 'Added 2 orders:'
+# events = event_store.get
+# pp project.call(Projections::AllOrders.new, {}, events)
+
+# p '*' * 40
+# event = Events::ItemAddedToOrder.new(payload: { order_id: 1, item_id: 1, name: 'ruby sticker', cost: 10 })
+# event_store.append(event)
+# event = Events::ItemAddedToOrder.new(payload: { order_id: 1, item_id: 2, name: 'git sticker', cost: 17 })
+# event_store.append(event)
+# event = Events::ItemAddedToOrder.new(payload: { order_id: 2, item_id: 3, name: 'ruby sticker', cost: 11 })
+# event_store.append(event)
+
+# puts "\nAdded stickers. Added cost:"
+# events = event_store.get
+# pp project.call(Projections::AllOrders.new, {}, events)
+
+# puts "\nTally cost of orders:"
+# pp project.call(Projections::CostForOrders.new, {}, events)
 
 # TODO: добавлю ID - в DevOps't важно всем ивентам давать id
 # Для соотв. з-нам ЕС есть 2 варианта реализации:
 # 1. Мартин Паули - держать хэшированный ключ, а потом выкидывать
 # 2. GDPR (3 разных стейта)
+
+module Producer
+  class AddItem
+    def initialize
+      @project = Projections::Project.new
+    end
+    def call(events, payloads)
+      state = project.call(Projections::AllOrders.new, {}, events)
+      orders = state[:orders]
+      ordrs_for_account = order.select { |order| order[account_id] == payload[account_id] }.first
+      if order_for_account
+        Events::OrderCreated.new(
+          payload {
+            order_id: order_for_account[:order_id]
+          })
+        Events::ItemAddedToOrder.new(
+          payload {
+            order_id: order_for_account[:order_id]
+          })
+        # add item
+      }
+      else
+        order_id = SecureRamdom.uuid
+        # create order + add item
+                Events::OrderCreated.new(
+          payload {
+            order_id: order_for_account[:order_id]
+          })
+        Events::ItemAddedToOrder.new(
+          payload {
+            order_id: order_for_account[:order_id]
+          })
+      end
+
+    end
+  end
+end
+]
+event_store = EventStore.new
+project = Projections::Project.new
+
+event = Events::OrderCreated.new(payload: {order_id: SecureRandom.uuid, account_id: 1} )
+
+puts '*' * 80
+event_store.envolve( Producers::AddItem.new, account_id: 1, name: 'ruby sticker', cost: 10 )
+event_store.envolve( Producers::AddItem.new, account_id: 2, name: 'hanami sticker', cost: 5 )
+event_store.envolve( Producers::AddItem.new, account_id: 2, name: 'ruby sticker', cost: 15 )
+# create order w/ item
+# -> OrderCreated
+# -> ItemAddedToOrder
+
