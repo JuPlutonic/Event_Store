@@ -68,7 +68,7 @@ end
 #
 module Projections
   # project(projection, initial_state, event_list) -> state
-  # inject / reduce defines call to itsels
+  # ???????????inject / reduce defines call to itsels
   class Project
     def call(projection, initial_state, events)
       events.reduce(initial_state) { |state, event| projection.call(state, event)}
@@ -166,7 +166,9 @@ end
 #
 
 
-#LAST COMMENTED OFF
+
+#LAST COMMENTED
+
 
 
 # p '*' * 40
@@ -201,58 +203,48 @@ end
 # 1. Мартин Паули - держать хэшированный ключ, а потом выкидывать
 # 2. GDPR (3 разных стейта)
 
-require 'securerandom'
-
-module Producers
-  # payload:
-  #   account_id
-  #   name
-  #   cost
+module Producer
   class AddItem
     def initialize
       @project = Projections::Project.new
     end
-
     def call(events, payloads)
       state = project.call(Projections::AllOrders.new, {}, events)
       orders = state[:orders]
-
-      orders_for_account = order.select { |order| order[:account_id] == payload[:account_id] }.first
-
+      ordrs_for_account = order.select { |order| order[account_id] == payload[account_id] }.first
       if order_for_account
-        [
-          Events::ItemAddedToOrder.new(
-            payload: {
-              order_id: order_for_account[:order_id], item_id: SecureRandom.uuid, name: payload[:name], cost: payload[:cost]
-            }
-          )
-        ]
+        Events::OrderCreated.new(
+          payload {
+            order_id: order_for_account[:order_id]
+          })
+        Events::ItemAddedToOrder.new(
+          payload {
+            order_id: order_for_account[:order_id]
+          })
         # add item
+      }
       else
         order_id = SecureRamdom.uuid
-
-        [ Events::OrderCreated.new(
-            payload: {
-              order_id: order_id, account_id: 2
-            }
-          ),
-          Events::ItemAddedToOrder.new(
-            payload: {
-              order_id: order_id, item_id: SecureRandom.uuid, name: payload[:name], cost: payload[:cost]
-            }
-          )
-        ]
         # create order + add item
+                Events::OrderCreated.new(
+          payload {
+            order_id: order_for_account[:order_id]
+          })
+        Events::ItemAddedToOrder.new(
+          payload {
+            order_id: order_for_account[:order_id]
+          })
       end
+
     end
   end
 end
-
+]
 event_store = EventStore.new
 project = Projections::Project.new
 
-event = Events::OrderCreated.new(payload: {order_id: 1, account_id: 1} )
-event_store.append(event)
+event = Events::OrderCreated.new(payload: {order_id: SecureRandom.uuid, account_id: 1} )
+
 puts '*' * 80
 event_store.envolve( Producers::AddItem.new, account_id: 1, name: 'ruby sticker', cost: 10 )
 event_store.envolve( Producers::AddItem.new, account_id: 2, name: 'hanami sticker', cost: 5 )
@@ -260,3 +252,4 @@ event_store.envolve( Producers::AddItem.new, account_id: 2, name: 'ruby sticker'
 # create order w/ item
 # -> OrderCreated
 # -> ItemAddedToOrder
+
