@@ -26,4 +26,7 @@ An Event Sourcing Retrospective - lecture by Dennis Doomen - Code Europe Autumn 
                                           from AvivaSolutions
 11.https://www.youtube.com/watch?v=GzrZworHpIk
 Event Sourcing You are doing it wrong by David Schmitz from Senacor Technologies 2018
+12.https://www.youtube.com/watch?v=1h3_6ATnOTw
+Event Sourcing for Everyone by Jenna Blum from Shopify
+https://github.com/jennaleeb/event_sourcing_for_everyone Paris.rb 2018
 ```
