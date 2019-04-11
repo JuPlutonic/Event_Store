@@ -42,10 +42,28 @@ class EventStore
   end
 
   def get
-    @store.flat_map { stream, events| events }
+    @store.flat_map { |stream, events| events }
   end
 
-  # ID - chaining events by account_id
+  # stream
+  #
+  # * In DevOps it's important to give ID for each event
+  #   (in ES ID called 'stream')
+  #
+  # * We can proceeding tons of events, chaining events in streams
+  #   and overcome heavy loads
+  #
+  # [
+  #   create order # => stream 1
+  #   add item # => stream 1
+  #   add item # => stream 1
+  #   remove item # => stream 1
+  #   checkout # => stream 1
+
+  #   create order # => stream 2
+  #   add item # => stream 2
+  #   checkout # => stream 2
+  # ]
   def get_stream(stream)
     @store[stream]
   end
@@ -53,17 +71,16 @@ class EventStore
   # EventStore.append doesn't use Producer
   def append(stream, *events)
     @store[stream]
-
-    puts '<' * 80
     events.each { |event| @store[stream] << event }
+    puts '+' * 80
   end
 
   # EventStore.envolve is better than append
   def envolve(stream, producer, payload)
     events = get_stream(stream)
     new_events = producer.call(events, payload)
-    puts '<' * 80
     @store[stream] += new_events
+    puts '<' * 80
   end
 end
 
@@ -150,17 +167,13 @@ module Producers
     #   cost
     def call(events, payload)
       state = @project.call(Projections::AllOrders.new, {}, events)
-      orders = state[:orders]
+      order_by_account = state[:orders]&.first
 
-      account_order = orders
-                      .select { |o| o[:account_id] == payload[:account_id] }
-                      .first
-
-      if account_order
+      if order_by_account
         [
           Events::ItemAddedToOrder.new(
             payload: {
-              order_id: account_order[:order_id],
+              order_id: order_by_account[:order_id],
               item_id: SecureRandom.uuid,
               name: payload[:name],
               cost: payload[:cost]
@@ -291,32 +304,44 @@ end
 # events = event_store.get
 # pp project.call(Projections::AllOrders.new, {}, events)
 
-# stream
+###############################################
+# 5.Test streams
+# Using account_id like ID                    #
 #
-# * In DevOps it's important to give ID for each event
-#   (in ES ID called 'stream')
-#
-# * We can proceeding tons of events, chaining events in streams
-#   and overcome heavy loads
-#
-# [
-#   create order # => stream 1
-#   add item # => stream 1
-#   add item # => stream 1
-#   remove item # => stream 1
-#   checkout # => stream 1
+p '*' * 78
+event_store = EventStore.new
+project = Projections::Project.new
+events = event_store.get
+pp project.call(Projections::AllOrders.new, {}, events)
 
-#   create order # => stream 2
-#   add item # => stream 2
-#   checkout # => stream 2
-# ]
+event = Events::OrderCreated.new(payload: { order_id: SecureRandom.uuid, account_id: 1 })
+event_store.append(event)
+
+event_store.envolve(1, Producers::AddItem.new, account_id: 1, name: 'ruby sticker', cost: 10)
+event_store.envolve(2, Producers::AddItem.new, account_id: 2, name: 'hanami sticker', cost: 5)
+event_store.envolve(2, Producers::AddItem.new, account_id: 2, name: 'ruby sticker', cost: 15)
+
+events = event_store.get
+pp project.call(Projections::AllOrders.new, {}, events)
+
+printf 'Output by streams'
+p '*' * 61
+
+events = event_store.get_stream(1)
+pp project.call(Projections::AllOrders.new, {}, events)
+
+events = event_store.get_stream(2)
+pp project.call(Projections::AllOrders.new, {}, events)
 
 
 # # TODO:
 #
 # * Change/delete event
 #   To follow ES practices we can coup with two different realizations:
-#  
+#
 #     1. Martin Pauli - holding key in a hash, and when release it
-#   
+#
 #     2. GDPR (3 different states)
+#
+# * Postgres can be used, to store streams/events
+#   Now it is @store with hash.
