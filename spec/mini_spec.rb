@@ -5,7 +5,7 @@ RSpec.describe 'Main' do
 
   it { expect(main.foo).to eq 'foo' }
 
-  it "does something useful" do
+  it 'does something useful' do
     expect(false).to eq(true)
   end
 end

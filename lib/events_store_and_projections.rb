@@ -10,7 +10,7 @@ require 'pp'
 #
 # * happen in the past
 # * data object
-# * обязательно имя и данные
+# * consist of minimum two parts: name and data
 # * can be any type hash, array, etc.
 module Events
   class Base
@@ -30,33 +30,41 @@ module Events
 end
 
 # event store
-#  * immutable - we transmitted all
-#      from the very beginning, event can't be deleted
+#
+# * immutable - we transmitted all
+#     from the very beginning, event can't be deleted
 # interface:
 # * get (nil -> list of events)
 # * append (list of events -> nil)
 class EventStore
   def initialize
-    @store = []
+    @store = Hash.new{ [] }
   end
 
   def get
-    @store
+    @store.flat_map { stream, events| events }
   end
 
-  # #append doesn't use Producer
-  def append(*events)
+  # ID - chaining events by account_id
+  def get_stream(stream)
+    @store[stream]
+  end
+
+  # EventStore.append doesn't use Producer
+  def append(stream, *events)
+    @store[stream]
+
     puts '<' * 80
-    events.each { |event| @store << event }
+    events.each { |event| @store[stream] << event }
   end
 
-  # #envolve is better than append
-  def envolve(producer, payload)
-    @store
-    new_events = producer.call(@store, payload)
-    @store =  @store + new_events
+  # EventStore.envolve is better than append
+  def envolve(stream, producer, payload)
+    events = get_stream(stream)
+    new_events = producer.call(events, payload)
+    puts '<' * 80
+    @store[stream] += new_events
   end
-
 end
 
 # projection
@@ -73,22 +81,27 @@ module Projections
   # inject / reduce defines call to itselvs
   class Project
     def call(projection, initial_state, events)
-      events.reduce(initial_state) { |state, event| projection.call(state, event)}
+      events
+        .reduce(initial_state) { |state, event| projection.call(state, event) }
     end
   end
 
-  # TODO: refacotor 2nd case 'when' with smth much more easier
+  # TODO: refacotor 2nd 'when' in 'case' block with smth much more easier
   # (im) true mutable paradigm, modifying state
   # Producer what collects order-events
   class AllOrders
     def call(state, event)
       case event
       when Events::OrderCreated
-      	state[:orders] ||= [] # array el-mnts got order numbers
-      	state[:orders] << { **event.payload, items: [] }
+        state[:orders] ||= [] # array el-mnts got order numbers
+        state[:orders] << { **event.payload, items: [] }
       when Events::ItemAddedToOrder
-        order = state[:orders].select { |o| o[:order_id] == event.payload[:order_id] }.first
-        state[:orders].delete_if { |o| o[:order_id] == event.payload[:order_id] }.first
+        order = state[:orders]
+                .select { |o| o[:order_id] == event.payload[:order_id] }
+                .first
+        state[:orders]
+          .delete_if { |o| o[:order_id] == event.payload[:order_id] }
+          .first
 
         order[:items] << event.payload
         state[:orders] << order
@@ -118,6 +131,10 @@ end
 require 'securerandom'
 
 # producer
+#
+# P. incapsulates logic of event creation, prevents inconsistencies like
+# creation of not completed event part (eg. Order w/o Item)
+#
 # * create order w/ item
 #   -> OrderCreated
 #   -> ItemAddedToOrder
@@ -135,13 +152,18 @@ module Producers
       state = @project.call(Projections::AllOrders.new, {}, events)
       orders = state[:orders]
 
-      order_for_account = orders.select { |order| order[:account_id] == payload[:account_id] }.first
+      account_order = orders
+                      .select { |o| o[:account_id] == payload[:account_id] }
+                      .first
 
-      if order_for_account
+      if account_order
         [
           Events::ItemAddedToOrder.new(
             payload: {
-              order_id: order_for_account[:order_id], item_id: SecureRandom.uuid, name: payload[:name], cost: payload[:cost]
+              order_id: account_order[:order_id],
+              item_id: SecureRandom.uuid,
+              name: payload[:name],
+              cost: payload[:cost]
             }
           )
         ]
@@ -149,17 +171,19 @@ module Producers
       else
         order_id = SecureRandom.uuid
 
-        [ Events::OrderCreated.new(
-            payload: {
-              order_id: order_id, account_id: payload[:account_id]
-            }
-          ),
-          Events::ItemAddedToOrder.new(
-            payload: {
-              order_id: order_id, item_id: SecureRandom.uuid, name: payload[:name], cost: payload[:cost]
-            }
-          )
-        ]
+        [Events::OrderCreated.new(
+          payload: {
+            order_id: order_id, account_id: payload[:account_id]
+          }
+        ),
+         Events::ItemAddedToOrder.new(
+           payload: {
+             order_id: order_id,
+             item_id: SecureRandom.uuid,
+             name: payload[:name],
+             cost: payload[:cost]
+           }
+         )]
         # create order + add item
       end
     end
@@ -251,24 +275,48 @@ end
 # Using EventStore.envolve to call producer   #
 # and send to it arguments (payload)
 #
-p '*' * 80
-event_store = EventStore.new
-project = Projections::Project.new
-events = event_store.get
-pp project.call(Projections::AllOrders.new, {}, events)
+# p '*' * 80
+# event_store = EventStore.new
+# project = Projections::Project.new
+# events = event_store.get
+# pp project.call(Projections::AllOrders.new, {}, events)
+
+# event = Events::OrderCreated.new(payload: { order_id: SecureRandom.uuid, account_id: 1 })
+# event_store.append(event)
+
+# event_store.envolve(Producers::AddItem.new, account_id: 1, name: 'ruby sticker', cost: 10)
+# event_store.envolve(Producers::AddItem.new, account_id: 2, name: 'hanami sticker', cost: 5)
+# event_store.envolve(Producers::AddItem.new, account_id: 2, name: 'ruby sticker', cost: 15)
+
+# events = event_store.get
+# pp project.call(Projections::AllOrders.new, {}, events)
+
+# stream
+#
+# * In DevOps it's important to give ID for each event
+#   (in ES ID called 'stream')
+#
+# * We can proceeding tons of events, chaining events in streams
+#   and overcome heavy loads
+#
+# [
+#   create order # => stream 1
+#   add item # => stream 1
+#   add item # => stream 1
+#   remove item # => stream 1
+#   checkout # => stream 1
+
+#   create order # => stream 2
+#   add item # => stream 2
+#   checkout # => stream 2
+# ]
 
 
-event = Events::OrderCreated.new(payload: {order_id: SecureRandom.uuid, account_id: 1} )
-event_store.append(event)
-
-event_store.envolve( Producers::AddItem.new, account_id: 1, name: 'ruby sticker', cost: 10 )
-event_store.envolve( Producers::AddItem.new, account_id: 2, name: 'hanami sticker', cost: 5 )
-event_store.envolve( Producers::AddItem.new, account_id: 2, name: 'ruby sticker', cost: 15 )
-
-events  = event_store.get
-pp project.call(Projections::AllOrders.new, {}, events)
-
-# TODO: add ID - in DevOps it's important to give ID for each event (in ES - )
-# Для соотв. з-нам ЕС есть 2 варианта реализации:
-# 1. Мартин Паули - держать хэшированный ключ, а потом выкидывать
-# 2. GDPR (3 разных стейта)
+# # TODO:
+#
+# * Change/delete event
+#   To follow ES practices we can coup with two different realizations:
+#  
+#     1. Martin Pauli - holding key in a hash, and when release it
+#   
+#     2. GDPR (3 different states)

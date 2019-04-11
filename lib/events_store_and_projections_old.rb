@@ -10,7 +10,7 @@ require 'pp'
 #
 # * happen in the past
 # * data object
-# * обязательно имя и данные
+# * consist of minimum two parts: name and data
 # * can be any type hash, array, etc.
 module Events
   class Base
@@ -30,8 +30,9 @@ module Events
 end
 
 # event store
-#  * immutable - we transmitted all
-#      from the very beginning, event can't be deleted
+#
+# * immutable - we transmitted all
+#     from the very beginning, event can't be deleted
 # interface:
 # * get (nil -> list of events)
 # * append (list of events -> nil)
@@ -44,17 +45,18 @@ class EventStore
     @store
   end
 
-# ENVOLVE IS BETTER (than append) BECAUSE IT USING PRODUCER
+  # EventStore.append doesn't use Producer
   def append(*events)
     puts '<' * 80
     events.each { |event| @store << event }
   end
+
+  # EventStore.envolve is better than append
   def envolve(producer, payload)
     @store
     new_events = producer.call(@store, payload)
-    @store = @store + new_events
+    @store += new_events
   end
-
 end
 
 # projection
@@ -68,25 +70,30 @@ end
 #
 module Projections
   # project(projection, initial_state, event_list) -> state
-  # ???????????inject / reduce defines call to itsels
+  # inject / reduce defines call to itselvs
   class Project
     def call(projection, initial_state, events)
-      events.reduce(initial_state) { |state, event| projection.call(state, event)}
+      events
+        .reduce(initial_state) { |state, event| projection.call(state, event) }
     end
   end
 
-  # TODO: refacotor 2nd case 'when' with smth much more easier
+  # TODO: refacotor 2nd 'when'in 'case' block with smth much more easier
   # (im) true mutable paradigm, modifying state
   # Producer what collects order-events
   class AllOrders
     def call(state, event)
       case event
       when Events::OrderCreated
-      	state[:orders] ||= [] # array el-mnts got order numbers
-      	state[:orders] << { **event.payload, items: [] }
+        state[:orders] ||= [] # array el-mnts got order numbers
+        state[:orders] << { **event.payload, items: [] }
       when Events::ItemAddedToOrder
-        order = state[:orders].select { |o| o[:order_id] == event.payload[:order_id] }.first
-        state[:orders].delete_if { |o| o[:order_id] == event.payload[:order_id] }.first
+        order = state[:orders]
+                .select { |o| o[:order_id] == event.payload[:order_id] }
+                .first
+        state[:orders]
+          .delete_if { |o| o[:order_id] == event.payload[:order_id] }
+          .first
 
         order[:items] << event.payload
         state[:orders] << order
@@ -96,8 +103,7 @@ module Projections
     end
   end
 
-  # TODO: 2.7 use Enumerable#tally
-  # Tally cost of orders
+  # TODO: 2.7 use Enumerable#tally to tally cost of orders
   class CostForOrders
     def call(state, event)
       case event
@@ -114,7 +120,70 @@ module Projections
   end
 end
 
+require 'securerandom'
+
+# producer
+#
+# P. incapsulates logic of event creation, prevents inconsistencies like
+# creation of not completed event part (eg. Order w/o Item)
+#
+# * create order w/ item
+#   -> OrderCreated
+#   -> ItemAddedToOrder
+module Producers
+  class AddItem
+    def initialize
+      @project = Projections::Project.new
+    end
+
+    # payload:
+    #   account_id
+    #   name
+    #   cost
+    def call(events, payload)
+      state = @project.call(Projections::AllOrders.new, {}, events)
+      orders = state[:orders]
+
+      account_order = orders
+                      .select { |o| o[:account_id] == payload[:account_id] }
+                      .first
+
+      if account_order
+        [
+          Events::ItemAddedToOrder.new(
+            payload: {
+              order_id: account_order[:order_id],
+              item_id: SecureRandom.uuid,
+              name: payload[:name],
+              cost: payload[:cost]
+            }
+          )
+        ]
+        # add item
+      else
+        order_id = SecureRandom.uuid
+
+        [Events::OrderCreated.new(
+          payload: {
+            order_id: order_id, account_id: payload[:account_id]
+          }
+        ),
+         Events::ItemAddedToOrder.new(
+           payload: {
+             order_id: order_id,
+             item_id: SecureRandom.uuid,
+             name: payload[:name],
+             cost: payload[:cost]
+           }
+         )]
+        # create order + add item
+      end
+    end
+  end
+end
+
 ###############################################
+# 1. Test for creating orders
 #            AllOrders                        #
 #
 # p '*' * 40 # event_store creation
@@ -138,6 +207,7 @@ end
 # p project.call(Projections::AllOrders.new, {}, events)
 
 ###############################################
+# 2. Test of pipelining of two events
 # Lifehack - any init state can be transmitted#
 #
 # p '*' * 40
@@ -162,15 +232,9 @@ end
 # p project.call(Projections::AllOrders.new, yesterdays_orders, events)
 
 ###############################################
+# 3. Test of pipelining of 3 events + summarize
 # CostForOrders                               #
 #
-
-
-
-#LAST COMMENTED
-
-
-
 # p '*' * 40
 # event_store = EventStore.new
 # project = Projections::Project.new
@@ -198,58 +262,23 @@ end
 # puts "\nTally cost of orders:"
 # pp project.call(Projections::CostForOrders.new, {}, events)
 
-# TODO: добавлю ID - в DevOps't важно всем ивентам давать id
-# Для соотв. з-нам ЕС есть 2 варианта реализации:
-# 1. Мартин Паули - держать хэшированный ключ, а потом выкидывать
-# 2. GDPR (3 разных стейта)
-
-module Producer
-  class AddItem
-    def initialize
-      @project = Projections::Project.new
-    end
-    def call(events, payloads)
-      state = project.call(Projections::AllOrders.new, {}, events)
-      orders = state[:orders]
-      ordrs_for_account = order.select { |order| order[account_id] == payload[account_id] }.first
-      if order_for_account
-        Events::OrderCreated.new(
-          payload {
-            order_id: order_for_account[:order_id]
-          })
-        Events::ItemAddedToOrder.new(
-          payload {
-            order_id: order_for_account[:order_id]
-          })
-        # add item
-      }
-      else
-        order_id = SecureRamdom.uuid
-        # create order + add item
-                Events::OrderCreated.new(
-          payload {
-            order_id: order_for_account[:order_id]
-          })
-        Events::ItemAddedToOrder.new(
-          payload {
-            order_id: order_for_account[:order_id]
-          })
-      end
-
-    end
-  end
-end
-]
+###############################################
+# 4.Test event creation with help of Producers
+# Using EventStore.envolve to call producer   #
+# and send to it arguments (payload)
+#
+p '*' * 80
 event_store = EventStore.new
 project = Projections::Project.new
+events = event_store.get
+pp project.call(Projections::AllOrders.new, {}, events)
 
-event = Events::OrderCreated.new(payload: {order_id: SecureRandom.uuid, account_id: 1} )
+event = Events::OrderCreated.new(payload: { order_id: SecureRandom.uuid, account_id: 1 })
+event_store.append(event)
 
-puts '*' * 80
-event_store.envolve( Producers::AddItem.new, account_id: 1, name: 'ruby sticker', cost: 10 )
-event_store.envolve( Producers::AddItem.new, account_id: 2, name: 'hanami sticker', cost: 5 )
-event_store.envolve( Producers::AddItem.new, account_id: 2, name: 'ruby sticker', cost: 15 )
-# create order w/ item
-# -> OrderCreated
-# -> ItemAddedToOrder
+event_store.envolve(Producers::AddItem.new, account_id: 1, name: 'ruby sticker', cost: 10)
+event_store.envolve(Producers::AddItem.new, account_id: 2, name: 'hanami sticker', cost: 5)
+event_store.envolve(Producers::AddItem.new, account_id: 2, name: 'ruby sticker', cost: 15)
 
+events = event_store.get
+pp project.call(Projections::AllOrders.new, {}, events)
