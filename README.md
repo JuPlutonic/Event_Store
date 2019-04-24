@@ -31,13 +31,31 @@ Module learning of ES (Also continuation of links):
 
 https://github.com/jennaleeb/event_sourcing_for_everyone
 
+# Videos
+
+1. [Applying CQRS & Event Sourcing on Rails applications - Andrzej Śliwa - wroc_love.rb 2018:](https://www.youtube.com/watch?v=cdwX1ZU623E) (description)
+
+- Normalizer is not equal EventHandler
+
+- Speaker mentioned Infrastructure(Infra module)/Plumbing (maybe `saga.rb`) for RailsEventStore 
+
+- Speaker told about [Fault tolerance for errors on event handlers, Infra::EventHandlerErrorStrategy](https://github.com/RailsEventStore/rails_event_store/issues/111)
+
+- See the mindmap with use-cases from the presentation on 38:03
+
+2. Nathan Ladd from Eventide(`eventide-project.org` is an Event-Sourced Automous Services):
+
+- [Event Sourcing Anti Patterns and Failures - wroc_love.rb 2018](https://www.youtube.com/watch?v=vh1QTk34350)
+
+- [Some DDD-patterns eg: Aggregate:](https://www.youtube.com/watch?v=sb-WO-KcODE)
+
 # Tools
 
 Event-sourcing, event-store examples:
 https://github.com/eventide-project (see pinned, eventide-project/docs)
 
 DB:
-https://eventstora.org (The stream database written from the ground up for event sourcing)
+https://eventstore.org (The stream database written from the ground up for event sourcing)
 
 Fullstack:
 https://railseventstore.org (!!!)
@@ -50,20 +68,9 @@ https://github.com/davydovanton/ivento (Simple event sourcing framework in funct
 
 # TODO
 
-Watch some videos
+Watch some videos:
 
 ```
-Wroc_love.rb:
-1.https://www.youtube.com/watch?v=cdwX1ZU623E
-Applying CQRS & Event Sourcing on Rails applications - Andrzej Śliwa - wroc_love.rb 2018
-normalizers != EventHandler
-search: Infra, Infra::EventHandleErrorStrategy, Infrastructure/Plumbing for RailsEventStore + infra/saga.rb
-use-cases in mm @ 38:03
-2.https://www.youtube.com/watch?v=vh1QTk34350
-vent Sourcing Anti Patterns and Failures - Nathan Ladd - wroc_love.rb 2018
-Eventide - project.org is an Event-Sourced Automous Services + https://www.youtube.com/watch?v=sb-WO-KcODE
-
-===================================================================================
 1.https://www.youtube.com/watch?v=veTVAN0oEkQEvent Storming - Alberto Brandolini - wroc_love.rb 2015
 event storming invented by Andolini (visually similar to Trello and Wekan - the Kanban board)
 2.https://www.youtube.com/watch?v=Rh2A96rpGpY
