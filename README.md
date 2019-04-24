@@ -57,15 +57,15 @@ Wroc_love.rb:
 1.https://www.youtube.com/watch?v=cdwX1ZU623E
 Applying CQRS & Event Sourcing on Rails applications - Andrzej Śliwa - wroc_love.rb 2018
 normalizers != EventHandler
-s4: Infra, Infra::EventHandleErrorStrategy, Infrastructure/Plumbing for RailsEventStore + infra/saga.rb
+search: Infra, Infra::EventHandleErrorStrategy, Infrastructure/Plumbing for RailsEventStore + infra/saga.rb
 use-cases in mm @ 38:03
 2.https://www.youtube.com/watch?v=vh1QTk34350
 vent Sourcing Anti Patterns and Failures - Nathan Ladd - wroc_love.rb 2018
-Eventide -project.org is an Event-Sourced Automous Services + https://www.youtube.com/watch?v=sb-WO-KcODE
+Eventide - project.org is an Event-Sourced Automous Services + https://www.youtube.com/watch?v=sb-WO-KcODE
 
 ===================================================================================
 1.https://www.youtube.com/watch?v=veTVAN0oEkQEvent Storming - Alberto Brandolini - wroc_love.rb 2015
-event storming invented by Andolini (main industrial example: Trello)
+event storming invented by Andolini (visually similar to Trello and Wekan - the Kanban board)
 2.https://www.youtube.com/watch?v=Rh2A96rpGpY
 Panel - CQRS & Event Sourcing & DDD - wroc_love.rb 2015
 ...
